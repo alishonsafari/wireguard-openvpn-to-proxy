@@ -1,0 +1,38 @@
+services:
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: vpn-upstream
+    cap_add:
+      - NET_ADMIN
+    restart: "no"
+    ports:
+      - "${XRAY_PORT:-28443}:28443/tcp"
+      - "${VMESS_PORT:-28080}:28080/tcp"
+    environment:
+      - TZ=${TZ:-Asia/Tehran}
+      - VPN_SERVICE_PROVIDER=custom
+      - VPN_TYPE=${VPN_TYPE:-wireguard}
+      - FIREWALL_INPUT_PORTS=${XRAY_PORT:-28443},${VMESS_PORT:-28080}
+      - WIREGUARD_PRIVATE_KEY=${WG_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${WG_ADDRESSES}
+      - WIREGUARD_PUBLIC_KEY=${WG_PUBLIC_KEY}
+      - WIREGUARD_ENDPOINT_IP=${WG_ENDPOINT_IP}
+      - WIREGUARD_ENDPOINT_PORT=${WG_ENDPOINT_PORT}
+      - WIREGUARD_PRESHARED_KEY=${WG_PRESHARED_KEY}
+      - OPENVPN_CUSTOM_CONFIG=/gluetun/custom.ovpn
+      - OPENVPN_USER=${OVPN_USER}
+      - OPENVPN_PASSWORD=${OVPN_PASSWORD}
+    volumes:
+      - ./gluetun:/gluetun
+
+  xray:
+    image: ghcr.io/xtls/xray-core:latest
+    container_name: xray-lan-gateway
+    depends_on:
+      - gluetun
+    network_mode: "service:gluetun"
+    restart: "no"
+    command: ["run", "-c", "/etc/xray/config.json"]
+    volumes:
+      - ./xray/config.json:/etc/xray/config.json:ro
+      - ./xray/log:/var/log/xray
