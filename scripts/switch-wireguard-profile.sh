@@ -109,11 +109,19 @@ resolve_ipv4() {
   if [[ -z "${ip}" ]] && command -v getent >/dev/null 2>&1; then
     ip="$(getent ahostsv4 "${host}" 2>/dev/null | awk '/STREAM/ {print $1; exit}')"
   fi
-  if [[ -z "${ip}" ]] && command -v python3 >/dev/null 2>&1; then
-    ip="$(python3 -c 'import socket,sys; print(socket.gethostbyname(sys.argv[1]))' "${host}" 2>/dev/null || true)"
+  if [[ -z "${ip}" ]] && command -v nslookup >/dev/null 2>&1; then
+    # Example line: "Address:  85.198.17.66"
+    # nslookup معمولاً دو بار "Address:" چاپ می‌کند:
+    # 1) آدرس DNS server (لوکال مثل 192.168.x.x)
+    # 2) آدرس رکورد موردنظر (مورد نیاز ما)
+    # بنابراین فقط Address بعد از بخش "Name:" را می‌گیریم.
+    ip="$(nslookup -type=A "${host}" 2>/dev/null | awk '
+      /^Name:[[:space:]]*/ {in_answer=1; next}
+      in_answer && /^Address:[[:space:]]*/ {print $2; exit}
+    ')"
   fi
   if [[ -z "${ip}" ]]; then
-    echo "Failed to resolve endpoint host '${host}' to IPv4 (install dig, getent, or python3)." >&2
+    echo "Failed to resolve endpoint host '${host}' to IPv4 (install dig/getent, or use DNS with nslookup)." >&2
     return 1
   fi
   printf '%s' "${ip}"
@@ -121,33 +129,39 @@ resolve_ipv4() {
 
 endpoint_ip="$(resolve_ipv4 "${endpoint_host}")" || exit 1
 
-python3 - "${ENV_PATH}" "${private_key}" "${address}" "${public_key}" "${endpoint_ip}" "${endpoint_port}" <<'PY'
-import pathlib, re, sys
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is required for updating .env (missing node)." >&2
+  exit 1
+fi
 
-path = pathlib.Path(sys.argv[1])
-keys = {
-    "VPN_TYPE": "wireguard",
-    "WG_PRIVATE_KEY": sys.argv[2],
-    "WG_ADDRESSES": sys.argv[3],
-    "WG_PUBLIC_KEY": sys.argv[4],
-    "WG_ENDPOINT_IP": sys.argv[5],
-    "WG_ENDPOINT_PORT": sys.argv[6],
+node - "${ENV_PATH}" "${private_key}" "${address}" "${public_key}" "${endpoint_ip}" "${endpoint_port}" <<'NODE'
+const fs = require('fs');
+
+// process.argv = [node, '-', envPath, privateKey, addr, publicKey, endpointIp, endpointPort]
+const [envPath, privateKey, addr, publicKey, endpointIp, endpointPort] = process.argv.slice(2);
+let text = fs.readFileSync(envPath, 'utf8');
+
+function setEnv(key, value) {
+  // Escape key for RegExp (so keys like WG_PUBLIC_KEY work safely).
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('^' + escapedKey + '=.*$', 'm');
+  if (re.test(text)) {
+    text = text.replace(re, `${key}=${value}`);
+  } else {
+    if (text.length > 0 && !text.endsWith('\n')) text += '\n';
+    text += `${key}=${value}\n`;
+  }
 }
-text = path.read_text(encoding="utf-8")
 
-def set_env(text: str, key: str, value: str) -> str:
-    pattern = re.compile(rf"^(?m){re.escape(key)}=.*$")
-    if pattern.search(text):
-        return pattern.sub(f"{key}={value}", text)
-    if text and not text.endswith("\n"):
-        text += "\n"
-    return text + f"{key}={value}\n"
+setEnv('VPN_TYPE', 'wireguard');
+setEnv('WG_PRIVATE_KEY', privateKey);
+setEnv('WG_ADDRESSES', addr);
+setEnv('WG_PUBLIC_KEY', publicKey);
+setEnv('WG_ENDPOINT_IP', endpointIp);
+setEnv('WG_ENDPOINT_PORT', endpointPort);
 
-for k, v in keys.items():
-    text = set_env(text, k, v)
-
-path.write_text(text, encoding="utf-8", newline="\n")
-PY
+fs.writeFileSync(envPath, text, 'utf8');
+NODE
 
 echo "Switched profile from: ${PROFILE_PATH}"
 echo "WG_ENDPOINT_IP: ${endpoint_ip}"

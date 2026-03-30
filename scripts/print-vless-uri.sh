@@ -49,32 +49,42 @@ if [[ -z "${HOST}" ]]; then
   }
 fi
 
-python3 - "${HOST}" "${XRAY_PORT}" "${REMARK}" <<'PY'
-import json, sys, urllib.parse
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is required for print-vless-uri.sh (no usable python3 detected)." >&2
+  exit 1
+fi
 
-host, port_s, remark = sys.argv[1], sys.argv[2], sys.argv[3]
-try:
-    port = int(port_s)
-except ValueError:
-    sys.exit("Invalid XRAY_PORT in .env")
+node - "${HOST}" "${XRAY_PORT}" "${REMARK}" <<'NODE'
+const fs = require('fs');
 
-with open("xray/config.json", encoding="utf-8") as f:
-    cfg = json.load(f)
+const host = process.argv[2];
+const port = Number(process.argv[3]);
+const remark = process.argv[4] ?? '';
 
-uuid = None
-for ib in cfg.get("inbounds") or []:
-    if ib.get("protocol") != "vless":
-        continue
-    st = ib.get("settings") or {}
-    clients = st.get("clients") or []
-    if clients and isinstance(clients[0], dict) and clients[0].get("id"):
-        uuid = clients[0]["id"]
-        break
+if (!Number.isFinite(port)) {
+  console.error('Invalid XRAY_PORT in .env');
+  process.exit(1);
+}
 
-if not uuid:
-    sys.exit("No VLESS client id found in xray/config.json (run generate-secrets).")
+const cfg = JSON.parse(fs.readFileSync('xray/config.json', 'utf8'));
 
-frag = urllib.parse.quote(remark, safe="")
-uri = f"vless://{uuid}@{host}:{port}?encryption=none&security=none&type=tcp&headerType=none#{frag}"
-print(uri)
-PY
+let uuid = null;
+for (const ib of (cfg.inbounds || [])) {
+  if (ib && ib.protocol === 'vless' && ib.settings && Array.isArray(ib.settings.clients)) {
+    const c0 = ib.settings.clients[0];
+    if (c0 && typeof c0 === 'object' && c0.id) {
+      uuid = c0.id;
+      break;
+    }
+  }
+}
+
+if (!uuid) {
+  console.error('No VLESS client id found in xray/config.json (run generate-secrets).');
+  process.exit(1);
+}
+
+const frag = encodeURIComponent(remark);
+const uri = `vless://${uuid}@${host}:${port}?encryption=none&security=none&type=tcp&headerType=none#${frag}`;
+console.log(uri);
+NODE

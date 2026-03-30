@@ -105,11 +105,11 @@ docker compose logs -f xray
 The server listens on the host mapped port (default `XRAY_PORT=28443` in `.env`). Build a standard **VLESS** URI for plain TCP on LAN (no TLS):
 
 ```bash
-./scripts/print-vless-uri.sh
+./scripts/print-vless-uri.sh --host 127.0.0.1
 ```
 
 ```powershell
-.\scripts\print-vless-uri.ps1
+.\scripts\print-vless-uri.ps1 --host 127.0.0.1
 ```
 
 By default the host in the link is your LAN IP (via `get-lan-ip`). Override if needed:

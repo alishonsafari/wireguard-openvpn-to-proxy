@@ -110,11 +110,11 @@ docker compose logs -f xray
 سرور روی میزبان روی پورت مثل **۲۸۴۴۳** (مقدار `XRAY_PORT` در `.env`) گوش می‌دهد. برای ساخت یک URI استاندارد **VLESS** (TCP روی LAN، بدون TLS) از اسکریپت زیر استفاده کن؛ خروجی را **کامل کپی** کن و در اپ کلاینت گزینهٔ **وارد کردن از کلیپ‌بورد** / **Import link** را بزن:
 
 ```bash
-./scripts/print-vless-uri.sh
+./scripts/print-vless-uri.sh --host 127.0.0.1
 ```
 
 ```powershell
-.\scripts\print-vless-uri.ps1
+.\scripts\print-vless-uri.ps1 --host 127.0.0.1
 ```
 
 به‌طور پیش‌فرض آی‌پی داخل لینک با `get-lan-ip` پر می‌شود. اگر لازم بود دستی بدهی:

@@ -2,6 +2,20 @@
 set -euo pipefail
 
 # Prefer IPv4 source used for default route (closest to Windows: interface with default gateway).
+if [[ -n "${LAN_IP:-}" ]]; then
+  if [[ "${LAN_IP}" =~ ^(192\.168\.|10\.) ]]; then
+    printf '%s\n' "${LAN_IP}"
+    exit 0
+  fi
+fi
+
+if command -v ipconfig >/dev/null 2>&1; then
+  # Windows (Git Bash): parse IPv4 from ipconfig output.
+  # Usually: "IPv4 Address. . . . . . . . . . . : 192.168.1.10"
+  cand="$(ipconfig 2>/dev/null | awk -F: '/IPv4/ {gsub(/^[ \t]+/, "", $2); print $2}' | grep -E '^(192\.168\.|10\.)' | head -n1)"
+  [[ -n "${cand}" ]] && { printf '%s\n' "${cand}"; exit 0; }
+fi
+
 if command -v ip >/dev/null 2>&1; then
   src_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{ for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit } }')"
   [[ -n "${src_ip}" ]] && { printf '%s\n' "${src_ip}"; exit 0; }

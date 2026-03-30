@@ -12,24 +12,39 @@ fi
 
 CONFIG_PATH="$(cd "$(dirname "${CONFIG_PATH}")" && pwd)/$(basename "${CONFIG_PATH}")"
 
-python3 - "${CONFIG_PATH}" <<'PY'
-import json, pathlib, sys, uuid
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is required for generate-secrets.sh (no usable python3 detected)." >&2
+  exit 1
+fi
 
-path = pathlib.Path(sys.argv[1])
-raw = path.read_text(encoding="utf-8")
-config = json.loads(raw)
-new_uuid = str(uuid.uuid4())
+node - "${CONFIG_PATH}" <<'NODE'
+const fs = require('fs');
+const { randomUUID } = require('crypto');
 
-for inbound in config.get("inbounds") or []:
-    settings = inbound.get("settings") or {}
-    clients = settings.get("clients")
-    if not clients:
-        continue
-    for client in clients:
-        if isinstance(client, dict) and "id" in client:
-            client["id"] = new_uuid
+const configPath = process.argv[2];
+if (!fs.existsSync(configPath)) {
+  console.error('Config file not found:', configPath);
+  process.exit(1);
+}
 
-path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
-print("New UUID generated and saved:")
-print(new_uuid)
-PY
+const raw = fs.readFileSync(configPath, 'utf8');
+const config = JSON.parse(raw);
+
+const newUuid = randomUUID();
+
+for (const inbound of (config.inbounds || [])) {
+  const settings = inbound?.settings || {};
+  const clients = settings?.clients;
+  if (!Array.isArray(clients)) continue;
+
+  for (const client of clients) {
+    if (client && typeof client === 'object' && Object.prototype.hasOwnProperty.call(client, 'id')) {
+      client.id = newUuid;
+    }
+  }
+}
+
+fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+console.log('New UUID generated and saved:');
+console.log(newUuid);
+NODE

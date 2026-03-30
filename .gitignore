@@ -1,2 +1,5 @@
 profiles/*.conf
 .env
+
+# Temporary env files created during script debugging/tests
+.env-test*
