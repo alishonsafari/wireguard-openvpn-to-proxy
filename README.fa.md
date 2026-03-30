@@ -1,97 +1,178 @@
-# راه‌اندازی Xray داخلی با Docker (روی ویندوز)
+# راه‌اندازی Gluetun + Xray (شبکهٔ داخلی)
 
-این پروژه یک `Xray` سرور سبک برای شبکه داخلی می‌سازد تا گوشی/لپ‌تاپ‌ها به سیستم شما وصل شوند و از مسیر خروجی VPN عبور کنند.
+با این پروژه یک سرور سبک **Xray** پشت **Gluetun** در Docker بالا می‌آید؛ دستگاه‌های روی LAN به پورت Xray روی ماشین میزبان وصل می‌شوند و خروجی‌شان از مسیر VPN upstream داخل کانتینر می‌رود.
 
-## ایده اصلی
+**English:** [README.md](README.md)
 
-1. کانتینر `gluetun` به VPN upstream وصل می‌شود (WireGuard یا OpenVPN).
-2. کانتینر `Xray` روی همان network stack اجرا می‌شود.
-3. کلاینت‌های شبکه داخلی به `Xray` وصل می‌شوند.
-4. خروجی کلاینت‌ها از تونل VPN داخل Docker عبور می‌کند.
+## ایدهٔ کلی
+
+1. کانتینر `gluetun` به VPN upstream وصل می‌شود (ترجیحاً WireGuard).
+2. کانتینر `xray` در همان استک Docker اجرا می‌شود.
+3. کلاینت‌های LAN به آی‌پی محلی میزبان و پورت منتشرشده وصل می‌شوند.
+4. ترافیک از تونل VPN عبور می‌کند.
 
 ---
 
-## 1) پیش‌نیاز
+## پیش‌نیاز
 
-- Docker Desktop نصب و فعال باشد.
-- سیستم و گوشی در یک LAN باشند (برای شروع داخلی).
-- اطلاعات WireGuard یا OpenVPN از پنل سرویس VPN داشته باشی.
+- Docker و `docker compose` نصب و در حال اجرا.
+- میزبان و کلاینت‌ها در یک شبکهٔ LAN (برای سناریوی پیشنهادی).
+- پروفایل WireGuard (فایل `.conf`) یا در صورت نیاز OpenVPN.
 
-## 2) تنظیم UUID
+**اسکریپت‌ها** برای هر کار معمولاً دو نسخه دارند: **Bash** (`*.sh`) و **PowerShell** (`*.ps1`).
 
-در مسیر پروژه اجرا کن:
+- **Bash:** لینوکس، macOS، Git Bash، WSL — از **ریشهٔ مخزن**: `./scripts/...`؛ در صورت نیاز `chmod +x scripts/*.sh`
+- **PowerShell:** ویندوز؛ در صورت خطای اجرای اسکریپت: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
+---
+
+## گام ۱ — ساخت فایل `.env`
+
+از **ریشهٔ پروژه** (جایی که `docker-compose.yml` است) فقط این دستور را بزن:
+
+```bash
+cp .env.example .env
+```
+
+```powershell
+Copy-Item .env.example .env
+```
+
+بعداً می‌توانی پورتها، `TZ` و مقادیر VPN را در `.env` عوض کنی. مراحل بعدی اگر از فایل پروفایل WireGuard استفاده کنی، فیلدهای `WG_*` را خودکار پر می‌کنند.
+
+---
+
+## گام ۲ — کپی پروفایل‌های WireGuard داخل `profiles/`
+
+فایل‌های `.conf` که از پنل VPN گرفتی (یا خروجی WireGuard) را در پوشهٔ **`profiles/`** بگذار، مثلاً:
+
+- `profiles/VS7.conf`
+- `profiles/IR.conf`
+
+برای هر سرور/لوکیشن یک فایل جدا نگه دار تا بعداً با اسکریپت بین‌شان سوئیچ کنی.
+
+---
+
+## گام ۳ — اعمال پروفایل روی `.env`، ساخت UUID، و بالا آوردن سرویس
+
+همهٔ دستورها را از **ریشهٔ مخزن** اجرا کن.
+
+### ۳الف — پر کردن `.env` از روی پروفایل WireGuard
+
+این اسکریپت کلیدها و `Endpoint` را می‌خواند، در صورت نیاز نام دامنهٔ endpoint را به IPv4 حل می‌کند و `WG_*` و `VPN_TYPE=wireguard` را در `.env` می**نویسد**:
+
+```bash
+./scripts/switch-wireguard-profile.sh --profile-path ./profiles/VS7.conf --restart-stack
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\switch-wireguard-profile.ps1 -ProfilePath .\profiles\VS7.conf -RestartStack
+```
+
+- برای **اولین بار** که هنوز استک بالا نیست، می‌توانی `--restart-stack` / `-RestartStack` را نگذاری.
+- اگر استک از قبل در حال اجراست و می‌خواهی `gluetun` و `xray` دوباره ساخته شوند، این سوئیچ را بگذار.
+
+### ۳ب — تولید UUID و نوشتن در `xray/config.json`
+
+قبل از گرفتن لینک اشتراک، یک بار (یا بعد از هر بار که خواستی UUID عوض شود) اجرا کن:
+
+```bash
+./scripts/generate-secrets.sh
+```
 
 ```powershell
 .\scripts\generate-secrets.ps1
 ```
 
-این دستور UUID امن می‌سازد و داخل `xray/config.json` جایگزین می‌کند.
+### ۳ج — بالا آوردن داکر
 
-## 3) انتخاب پروتکل VPN (بر اساس عکس شما)
-
-بین گزینه‌های `L2TP / CISCO / WIREGUARD / OPENVPN / IKEV2`:
-
-- پیشنهاد اصلی: `WIREGUARD` (سریع‌تر، ساده‌تر برای Docker، سربار کمتر)
-- گزینه جایگزین: `OPENVPN` (اگر فقط `.ovpn` داری)
-- `L2TP / IKEV2 / CISCO` برای Docker این سناریو پیچیده‌تر و کم‌ارزش‌تر هستند.
-
-## 4) تنظیم `.env`
-
-```powershell
-copy .env.example .env
+```bash
+docker compose up -d
 ```
 
-سپس فایل `.env` را کامل کن:
+مشاهدهٔ لاگ در صورت نیاز:
 
-- اگر `WireGuard` داری: مقادیر `WG_*` را از پنل VPN پر کن و `VPN_TYPE=wireguard`
-- اگر فقط `OpenVPN` داری: `VPN_TYPE=openvpn` بگذار و فایل `custom.ovpn` را در مسیر `gluetun/custom.ovpn` قرار بده
-
-## 5) بالا آوردن سرویس
-
-```powershell
-docker compose up -d
+```bash
 docker compose logs -f gluetun
 docker compose logs -f xray
 ```
 
-## 6) باز کردن پورت روی فایروال ویندوز
-
-```powershell
-New-NetFirewallRule -DisplayName "Xray LAN 28443" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 28443
-```
-
-## 7) ساخت کانکشن در کلاینت (گوشی/سیستم)
-
-در کلاینت‌هایی مثل `NekoBox` / `v2rayN`:
-
-- Protocol: `VLESS`
-- Address: آی‌پی LAN سیستم ویندوز (مثلا `192.168.1.10`)
-- Port: `28443` (یا مقدار `XRAY_PORT` در `.env`)
-- UUID: همان مقدار داخل `xray/config.json`
-- Encryption: `none`
-- Transport: `tcp`
-- TLS: خاموش (برای LAN داخلی)
-
-بعد از اتصال، تست کن:
-- `https://ipinfo.io/ip`
-- باید IP خروجی مربوط به VPN upstream داخل Docker باشد.
+**OpenVPN:** در `.env` بگذار `VPN_TYPE=openvpn`، فایل را در `gluetun/custom.ovpn` قرار بده و در صورت نیاز `OVPN_*` را پر کن — مرحلهٔ پروفایل WireGuard لازم نیست.
 
 ---
 
-## Routing فعلی در Xray
+## گام ۴ — لینک VLESS برای کپی در کلاینت (NekoBox / v2rayNG / v2rayN)
 
-در `xray/config.json`:
+سرور روی میزبان روی پورت مثل **۲۸۴۴۳** (مقدار `XRAY_PORT` در `.env`) گوش می‌دهد. برای ساخت یک URI استاندارد **VLESS** (TCP روی LAN، بدون TLS) از اسکریپت زیر استفاده کن؛ خروجی را **کامل کپی** کن و در اپ کلاینت گزینهٔ **وارد کردن از کلیپ‌بورد** / **Import link** را بزن:
+
+```bash
+./scripts/print-vless-uri.sh
+```
+
+```powershell
+.\scripts\print-vless-uri.ps1
+```
+
+به‌طور پیش‌فرض آی‌پی داخل لینک با `get-lan-ip` پر می‌شود. اگر لازم بود دستی بدهی:
+
+```bash
+./scripts/print-vless-uri.sh --host 192.168.1.10 --remark "خانه"
+```
+
+```powershell
+.\scripts\print-vless-uri.ps1 -HostAddr 192.168.1.10 -Remark "home"
+```
+
+**نکته:** این اسکریپت UUID را از اولین inbound از نوع `vless` در `xray/config.json` می‌خواند؛ پس حتماً قبلش `generate-secrets` را اجرا کرده باشی.
+
+### لینک دانلود کلاینت‌ها
+
+- **NekoBox (اندروید):** [https://github.com/MatsuriDayo/NekoBoxForAndroid](https://github.com/MatsuriDayo/NekoBoxForAndroid)
+- **v2rayNG (اندروید):** [https://github.com/2dust/v2rayNG](https://github.com/2dust/v2rayNG)
+- **v2rayN (ویندوز):** [https://github.com/2dust/v2rayN](https://github.com/2dust/v2rayN)
+
+بعد از وصل شدن می‌توانی با [https://ipinfo.io/ip](https://ipinfo.io/ip) ببینی IP خروجی همان VPN upstream است یا نه.
+
+---
+
+## باز کردن پورت روی فایروال
+
+**ویندوز (CMD با دسترسی ادمین، بدون PowerShell):**
+
+```bat
+netsh advfirewall firewall add rule name="Xray LAN 28443" dir=in action=allow protocol=TCP localport=28443
+```
+
+اگر `XRAY_PORT` را عوض کردی، `localport` را هماهنگ کن.
+
+**لینوکس (مثال UFW):**
+
+```bash
+sudo ufw allow 28443/tcp
+```
+
+---
+
+## جدول اسکریپت‌های کمکی
+
+| اسکریپت | کار |
+|---------|-----|
+| `get-lan-ip.*` | چاپ یک آی‌پی LAN محتمل |
+| `switch-wireguard-profile.*` | پر کردن `WG_*` در `.env` از `.conf` |
+| `generate-secrets.*` | UUID جدید در `xray/config.json` |
+| `print-vless-uri.*` | چاپ لینک `vless://` برای کلاینت |
+
+---
+
+## Routing فعلی در `xray/config.json`
 
 - تبلیغات با `geosite:category-ads-all` بلاک می‌شود.
-- شبکه خصوصی (`private`) مستقیم handled می‌شود.
-- بقیه ترافیک outbound عادی `freedom` است (که از تونل VPN کانتینر تبعیت می‌کند).
-
-اگر خواستی routing پیچیده‌تر (لیست دامنه سفارشی، split جدا، policy برای اپ‌ها) اضافه کنیم، روی همین فایل توسعه می‌دهیم.
+- شبکهٔ خصوصی (`private`) مستقیم مدیریت می‌شود.
+- خروجی پیش‌فرض `freedom` است و از مسیر VPN کانتینر تبعیت می‌کند.
 
 ---
 
 ## نکات مهم
 
-- این کانفیگ برای **LAN داخلی** است و TLS/REALITY ندارد.
-- اگر بخواهی از بیرون خانه هم وصل شوی، باید نسخه امن اینترنتی (VLESS + REALITY + محدودسازی فایروال) اضافه کنیم.
-- روی ویندوز، host network مثل لینوکس نداریم؛ بنابراین `gluetun + port mapping` روش درست است.
+- این کانفیگ برای **LAN مورد اعتماد** است؛ روی inbound عمومی TLS / REALITY ندارد.
+- روی ویندوز host network مثل لینوکس نیست؛ استفاده از port mapping به‌همراه Gluetun روش معمول است.
