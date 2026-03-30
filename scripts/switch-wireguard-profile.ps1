@@ -9,8 +9,16 @@ if (-not (Test-Path $ProfilePath)) {
   throw "WireGuard profile not found: $ProfilePath"
 }
 
-if (-not (Test-Path $EnvPath)) {
-  throw ".env file not found: $EnvPath"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot = (Resolve-Path (Join-Path $ScriptDir "..")).Path
+
+if (-not (Test-Path -LiteralPath $EnvPath)) {
+  $examplePath = Join-Path $RepoRoot ".env.example"
+  if (-not (Test-Path $examplePath)) {
+    throw ".env file not found: $EnvPath and no .env.example in repo to bootstrap from."
+  }
+  Copy-Item -LiteralPath $examplePath -Destination $EnvPath
+  Write-Host "Created $EnvPath from .env.example"
 }
 
 $profileFullPath = (Resolve-Path $ProfilePath).Path

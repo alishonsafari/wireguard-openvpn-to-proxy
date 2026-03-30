@@ -47,7 +47,17 @@ if [[ "${ENV_PATH}" != /* ]]; then
 fi
 
 [[ -f "${PROFILE_PATH}" ]] || { echo "WireGuard profile not found: ${PROFILE_PATH}" >&2; exit 1; }
-[[ -f "${ENV_PATH}" ]] || { echo ".env file not found: ${ENV_PATH}" >&2; exit 1; }
+
+if [[ ! -f "${ENV_PATH}" ]]; then
+  example="${REPO_ROOT}/.env.example"
+  if [[ -f "${example}" ]]; then
+    cp "${example}" "${ENV_PATH}"
+    echo "Created ${ENV_PATH} from .env.example" >&2
+  else
+    echo ".env not found at ${ENV_PATH} and repo has no .env.example to copy." >&2
+    exit 1
+  fi
+fi
 
 get_ini_value() {
   local key="$1" file="$2"

@@ -26,9 +26,11 @@ Helper scripts exist in both **Bash** (`.sh`) and **PowerShell** (`.ps1`).
 
 ---
 
-## Step 1 — Create `.env`
+## Step 1 — `.env` file
 
-From the **repository root** (where `docker-compose.yml` is):
+Compose, `print-vless-uri`, and Gluetun all expect a **`.env`** in the repo root. Nothing in the repo commits a real `.env`; you start from **`.env.example`**.
+
+**Option A — create it yourself** (from the repo root):
 
 ```bash
 cp .env.example .env
@@ -38,7 +40,9 @@ cp .env.example .env
 Copy-Item .env.example .env
 ```
 
-You can edit `.env` later (ports, `TZ`, and VPN fields). The next steps automate WireGuard fields when you use a profile file.
+**Option B — skip this step for now:** in **Step 3**, `switch-wireguard-profile` will **create `.env` automatically** by copying `.env.example` if `.env` is missing, then it fills the `WG_*` fields from your profile.
+
+So the manual `cp` is optional when you use that script with the default `.env` path. If you use **OpenVPN only** and never run `switch-wireguard-profile`, create `.env` with option A and edit it by hand.
 
 ---
 
