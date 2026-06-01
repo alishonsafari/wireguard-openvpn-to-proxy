@@ -1,2 +1,3 @@
-profiles/*.conf
+profiles/*
+xray/log
 .env
