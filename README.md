@@ -50,9 +50,13 @@ The script will:
 2. Ensure a VLESS UUID exists in `xray/config.json`
 3. Start `gluetun` + `xray` with Docker Compose
 4. Wait until the VPN tunnel is up
-5. Print a **VLESS** link and Persian status messages (copy into v2rayN / v2rayNG / NekoBox)
+5. Print **two VLESS links** in bordered, colored blocks (cyan = LAN, green = localhost; English console output):
+   - **LAN** — host IP of this machine on Wi‑Fi (`get-lan-ip`); paste into v2rayNG / NekoBox on your **phone or another device** on the same network
+   - **127.0.0.1** — for testing in a client on **this PC only**
 
-Optional: `--host 127.0.0.1` / `-HostAddr 127.0.0.1` for testing on the same PC only; omit for LAN clients (auto-detected IP).
+Set `NO_COLOR=1` to disable ANSI colors in Bash (borders remain).
+
+Optional: `--host <ip>` / `-HostAddr <ip>` overrides the detected LAN IP in the first link (e.g. if auto-detection picks the wrong adapter).
 
 **Recommended:** use `start-stack` for normal use — one profile path, Docker starts, VLESS link is printed. That is enough for most people.
 

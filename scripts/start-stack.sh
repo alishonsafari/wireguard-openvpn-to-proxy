@@ -8,8 +8,8 @@ ENV_PATH="./.env"
 VPN_WAIT_SECS=120
 
 usage() {
-  echo "Usage: $0 --profile-path <profiles/file.conf|.ovpn> [--host <ip>] [--remark <label>] [--env-path <path>]" >&2
-  echo "  Applies VPN profile, starts Docker (gluetun + xray), waits for VPN, prints VLESS URI." >&2
+  echo "Usage: $0 --profile-path <profiles/file.conf|.ovpn> [--host <lan-ip>] [--remark <label>] [--env-path <path>]" >&2
+  echo "  Applies VPN profile, starts Docker (gluetun + xray), waits for VPN, prints two VLESS URIs (LAN + 127.0.0.1)." >&2
   exit 1
 }
 
@@ -65,15 +65,47 @@ fi
 log() { printf '%s\n' "$*"; }
 ok() { log "[OK] $*"; }
 info() { log "[..] $*"; }
-fail() { log "[خطا] $*"; exit 1; }
+fail() { log "[ERROR] $*"; exit 1; }
 
-[[ -f "${PROFILE_PATH}" ]] || fail "فایل پروفایل پیدا نشد: ${PROFILE_PATH}"
+_color_enabled() {
+  [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]
+}
+
+# Print a VLESS URI in a bordered, colored block (TTY only).
+print_vless_box() {
+  local title="$1"
+  local uri="$2"
+  local hint="${3:-Paste into v2rayN / v2rayNG / NekoBox → Import from clipboard}"
+  local color_code="${4:-36}" # cyan default; 32 = green
+  local w=${#uri} title_len=${#title} bar="" i
+  ((w < title_len + 2)) && w=$((title_len + 2))
+  w=$((w + 4))
+  for ((i = 0; i < w; i++)); do bar+="─"; done
+
+  local dim="" bold="" uri_color="" reset=""
+  if _color_enabled; then
+    dim=$'\033[2m'
+    bold=$'\033[1m'
+    uri_color=$'\033['"${color_code}"'m'
+    reset=$'\033[0m'
+  fi
+
+  printf '\n'
+  printf '%s%s%s\n' "${dim}" "${bar}" "${reset}"
+  printf '%s  %s%s\n' "${bold}" "${title}" "${reset}"
+  printf '%s  %s%s\n' "${dim}" "${hint}" "${reset}"
+  printf '%s  %s%s\n' "${uri_color}" "${uri}" "${reset}"
+  printf '%s%s%s\n' "${dim}" "${bar}" "${reset}"
+  printf '\n'
+}
+
+[[ -f "${PROFILE_PATH}" ]] || fail "Profile file not found: ${PROFILE_PATH}"
 
 if ! command -v docker >/dev/null 2>&1; then
-  fail "Docker نصب نیست یا در PATH نیست."
+  fail "Docker is not installed or not on PATH."
 fi
 if ! docker compose version >/dev/null 2>&1; then
-  fail "docker compose در دسترس نیست."
+  fail "docker compose is not available."
 fi
 
 ext="${PROFILE_PATH##*.}"
@@ -81,29 +113,29 @@ ext_lower="$(printf '%s' "${ext}" | tr '[:upper:]' '[:lower:]')"
 
 cd "${REPO_ROOT}"
 
-info "اعمال پروفایل VPN: ${PROFILE_PATH}"
+info "Applying VPN profile: ${PROFILE_PATH}"
 if [[ "${ext_lower}" == "ovpn" ]]; then
   "${SCRIPT_DIR}/switch-openvpn-profile.sh" --profile-path "${PROFILE_PATH}" --env-path "${ENV_PATH}"
 elif [[ "${ext_lower}" == "conf" ]]; then
   "${SCRIPT_DIR}/switch-wireguard-profile.sh" --profile-path "${PROFILE_PATH}" --env-path "${ENV_PATH}"
 else
-  fail "پسوند پروفایل پشتیبانی نمی‌شود: .${ext_lower} (فقط .ovpn یا .conf)"
+  fail "Unsupported profile extension: .${ext_lower} (use .ovpn or .conf only)"
 fi
-ok "پروفایل VPN روی .env و gluetun اعمال شد."
+ok "VPN profile applied to .env and gluetun."
 
 if [[ "${ext_lower}" == "ovpn" ]]; then
   custom_ovpn="${REPO_ROOT}/gluetun/custom.ovpn"
   if [[ -f "${custom_ovpn}" ]] && grep -qE '^[[:space:]]*auth-user-pass' "${custom_ovpn}"; then
     if ! grep -qE '^[[:space:]]*OVPN_USER=.+' "${ENV_PATH}" 2>/dev/null ||
       ! grep -qE '^[[:space:]]*OVPN_PASSWORD=.+' "${ENV_PATH}" 2>/dev/null; then
-      fail "این پروفایل OpenVPN به auth-user-pass نیاز دارد. در .env مقدار OVPN_USER و OVPN_PASSWORD را پر کنید."
+      fail "This OpenVPN profile requires auth-user-pass. Set OVPN_USER and OVPN_PASSWORD in .env."
     fi
-    ok "اعتبار OpenVPN (OVPN_USER / OVPN_PASSWORD) در .env تنظیم شده است."
+    ok "OpenVPN credentials (OVPN_USER / OVPN_PASSWORD) are set in .env."
   fi
 fi
 
 if ! command -v node >/dev/null 2>&1; then
-  fail "برای بررسی UUID به node نیاز است."
+  fail "node is required to verify the VLESS UUID."
 fi
 
 has_uuid="$(node - "${REPO_ROOT}/xray/config.json" <<'NODE'
@@ -120,17 +152,17 @@ NODE
 )" || true
 
 if [[ "${has_uuid}" != "yes" ]]; then
-  info "UUID در xray/config.json نیست؛ در حال ساخت..."
+  info "No VLESS UUID in xray/config.json; generating..."
   "${SCRIPT_DIR}/generate-secrets.sh"
-  ok "UUID ساخته و در xray/config.json ذخیره شد."
+  ok "UUID written to xray/config.json."
 else
-  ok "UUID کلاینت VLESS در xray/config.json موجود است."
+  ok "VLESS client UUID found in xray/config.json."
 fi
 
-info "بالا آوردن Docker (gluetun + xray)..."
+info "Starting Docker (gluetun + xray)..."
 docker compose up -d --force-recreate gluetun xray
 
-info "منتظر اتصال VPN هستیم (حداکثر ${VPN_WAIT_SECS} ثانیه)..."
+info "Waiting for VPN connection (up to ${VPN_WAIT_SECS}s)..."
 deadline=$((SECONDS + VPN_WAIT_SECS))
 vpn_ok=0
 while ((SECONDS < deadline)); do
@@ -151,38 +183,47 @@ while ((SECONDS < deadline)); do
 done
 
 if [[ "${vpn_ok}" -ne 1 ]]; then
-  fail "VPN وصل نشد. آخرین لاگ gluetun:
+  fail "VPN did not come up. Last gluetun logs:
 $(docker compose logs gluetun --tail 25 2>/dev/null || true)"
 fi
-ok "تونل VPN (gluetun) برقرار است."
+ok "VPN tunnel (gluetun) is up."
 
 if ! docker inspect -f '{{.State.Running}}' xray-lan-gateway 2>/dev/null | grep -q true; then
-  fail "کانتینر xray در حال اجرا نیست. لاگ: $(docker compose logs xray --tail 15 2>/dev/null || true)"
+  fail "xray container is not running. Logs: $(docker compose logs xray --tail 15 2>/dev/null || true)"
 fi
-ok "سرویس Xray در حال اجرا است."
+ok "Xray is running."
 
-print_args=(--remark "${REMARK}")
-[[ -n "${HOST}" ]] && print_args+=(--host "${HOST}")
+LAN_IP="${HOST}"
+if [[ -z "${LAN_IP}" ]]; then
+  LAN_IP="$("${SCRIPT_DIR}/get-lan-ip.sh" 2>/dev/null || true)"
+fi
 
-VLESS_URI="$("${SCRIPT_DIR}/print-vless-uri.sh" "${print_args[@]}")"
-LAN_IP="$("${SCRIPT_DIR}/get-lan-ip.sh" 2>/dev/null || true)"
+VLESS_LAN=""
+VLESS_LOCAL=""
+if [[ -n "${LAN_IP}" ]]; then
+  VLESS_LAN="$("${SCRIPT_DIR}/print-vless-uri.sh" --host "${LAN_IP}" --remark "${REMARK}-lan")"
+else
+  info "Could not detect LAN IP; only the localhost VLESS link is shown."
+fi
+VLESS_LOCAL="$("${SCRIPT_DIR}/print-vless-uri.sh" --host 127.0.0.1 --remark "${REMARK}-local")"
 
 log ""
 log "========================================"
-ok "همه چیز درست است — استک آماده است."
+ok "All checks passed — stack is ready."
 log "========================================"
 log ""
-log "این لینک VLESS را در کلاینت (v2rayN / v2rayNG / NekoBox) کپی کنید:"
-log "  Import from clipboard / وارد کردن از کلیپ‌بورد"
-log ""
-log "${VLESS_URI}"
-log ""
-if [[ -n "${LAN_IP}" && -z "${HOST}" ]]; then
-  log "آدرس LAN میزبان: ${LAN_IP} — کلاینت‌های دیگر روی همان Wi‑Fi باید به این IP وصل شوند."
-elif [[ -n "${HOST}" ]]; then
-  log "آدرس در لینک: ${HOST} (دستی تنظیم شده)"
+if [[ -n "${VLESS_LAN}" ]]; then
+  print_vless_box \
+    "VLESS — phone / other devices on Wi-Fi (host ${LAN_IP})" \
+    "${VLESS_LAN}" \
+    "Paste into v2rayN / v2rayNG / NekoBox → Import from clipboard" \
+    36
 fi
-log "پورت Xray از .env (معمولاً 28443). ترافیک از تونل VPN upstream خارج می‌شود."
-log ""
-log "بررسی اختیاری: بعد از اتصال کلاینت، IP خروجی را ببینید — https://ipinfo.io/ip"
+print_vless_box \
+  "VLESS — this PC only (127.0.0.1)" \
+  "${VLESS_LOCAL}" \
+  "Paste into v2rayN / v2rayNG / NekoBox → Import from clipboard" \
+  32
+log "Xray port is from .env (default 28443). Traffic exits through the VPN upstream."
+log "Optional: after connecting a client, check egress IP at https://ipinfo.io/ip"
 log "========================================"

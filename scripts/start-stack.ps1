@@ -13,8 +13,26 @@ function Write-Log([string]$Message) { Write-Host $Message }
 function Write-Ok([string]$Message) { Write-Host "[OK] $Message" }
 function Write-Info([string]$Message) { Write-Host "[..] $Message" }
 function Write-Fail([string]$Message) {
-  Write-Host "[خطا] $Message"
+  Write-Host "[ERROR] $Message"
   exit 1
+}
+
+function Write-VlessBox {
+  param(
+    [string]$Title,
+    [string]$Uri,
+    [string]$Hint = "Paste into v2rayN / v2rayNG / NekoBox -> Import from clipboard",
+    [ConsoleColor]$UriColor = "Cyan"
+  )
+  $w = [Math]::Max($Uri.Length, $Title.Length) + 4
+  $bar = ("─" * $w)
+  Write-Host ""
+  Write-Host $bar -ForegroundColor DarkGray
+  Write-Host "  $Title" -ForegroundColor White
+  Write-Host "  $Hint" -ForegroundColor DarkGray
+  Write-Host "  $Uri" -ForegroundColor $UriColor
+  Write-Host $bar -ForegroundColor DarkGray
+  Write-Host ""
 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -25,7 +43,7 @@ if (-not (Test-Path -LiteralPath $ProfilePath)) {
   if (Test-Path -LiteralPath $candidate) {
     $ProfilePath = $candidate
   } else {
-    Write-Fail "فایل پروفایل پیدا نشد: $ProfilePath"
+    Write-Fail "Profile file not found: $ProfilePath"
   }
 } else {
   $ProfilePath = (Resolve-Path -LiteralPath $ProfilePath).Path
@@ -41,13 +59,13 @@ if (-not (Test-Path -LiteralPath $EnvPath)) {
 try {
   docker compose version | Out-Null
 } catch {
-  Write-Fail "Docker یا docker compose در دسترس نیست."
+  Write-Fail "Docker or docker compose is not available."
 }
 
 $ext = [System.IO.Path]::GetExtension($ProfilePath).ToLowerInvariant()
 Set-Location $RepoRoot
 
-Write-Info "اعمال پروفایل VPN: $ProfilePath"
+Write-Info "Applying VPN profile: $ProfilePath"
 switch ($ext) {
   ".ovpn" {
     & (Join-Path $ScriptDir "switch-openvpn-profile.ps1") -ProfilePath $ProfilePath -EnvPath $EnvPath
@@ -56,10 +74,10 @@ switch ($ext) {
     & (Join-Path $ScriptDir "switch-wireguard-profile.ps1") -ProfilePath $ProfilePath -EnvPath $EnvPath
   }
   default {
-    Write-Fail "پسوند پروفایل پشتیبانی نمی‌شود: $ext (فقط .ovpn یا .conf)"
+    Write-Fail "Unsupported profile extension: $ext (use .ovpn or .conf only)"
   }
 }
-Write-Ok "پروفایل VPN روی .env و gluetun اعمال شد."
+Write-Ok "VPN profile applied to .env and gluetun."
 
 if ($ext -eq ".ovpn") {
   $customOvpn = Join-Path $RepoRoot "gluetun\custom.ovpn"
@@ -68,10 +86,10 @@ if ($ext -eq ".ovpn") {
     $hasUser = $envLines | Where-Object { $_ -match '^\s*OVPN_USER=.+' }
     $hasPass = $envLines | Where-Object { $_ -match '^\s*OVPN_PASSWORD=.+' }
     if (-not $hasUser -or -not $hasPass) {
-      Write-Fail "این پروفایل OpenVPN به auth-user-pass نیاز دارد. در .env مقدار OVPN_USER و OVPN_PASSWORD را پر کنید."
+      Write-Fail "This OpenVPN profile requires auth-user-pass. Set OVPN_USER and OVPN_PASSWORD in .env."
     }
   }
-  Write-Ok "اعتبار OpenVPN (OVPN_USER / OVPN_PASSWORD) در .env تنظیم شده است."
+  Write-Ok "OpenVPN credentials (OVPN_USER / OVPN_PASSWORD) are set in .env."
 }
 
 $configPath = Join-Path $RepoRoot "xray\config.json"
@@ -87,17 +105,17 @@ if (Test-Path $configPath) {
 }
 
 if (-not $hasUuid) {
-  Write-Info "UUID در xray/config.json نیست؛ در حال ساخت..."
+  Write-Info "No VLESS UUID in xray/config.json; generating..."
   & (Join-Path $ScriptDir "generate-secrets.ps1")
-  Write-Ok "UUID ساخته و در xray/config.json ذخیره شد."
+  Write-Ok "UUID written to xray/config.json."
 } else {
-  Write-Ok "UUID کلاینت VLESS در xray/config.json موجود است."
+  Write-Ok "VLESS client UUID found in xray/config.json."
 }
 
-Write-Info "بالا آوردن Docker (gluetun + xray)..."
+Write-Info "Starting Docker (gluetun + xray)..."
 docker compose up -d --force-recreate gluetun xray
 
-Write-Info "منتظر اتصال VPN هستیم (حداکثر $TimeoutSec ثانیه)..."
+Write-Info "Waiting for VPN connection (up to $TimeoutSec s)..."
 $deadline = (Get-Date).AddSeconds($TimeoutSec)
 $vpnOk = $false
 while ((Get-Date) -lt $deadline) {
@@ -120,44 +138,50 @@ while ((Get-Date) -lt $deadline) {
 
 if (-not $vpnOk) {
   $tail = docker compose logs gluetun --tail 25 2>&1 | Out-String
-  Write-Fail "VPN وصل نشد. آخرین لاگ gluetun:`n$tail"
+  Write-Fail "VPN did not come up. Last gluetun logs:`n$tail"
 }
-Write-Ok "تونل VPN (gluetun) برقرار است."
+Write-Ok "VPN tunnel (gluetun) is up."
 
 $xrayRunning = docker inspect -f '{{.State.Running}}' xray-lan-gateway 2>$null
 if ($xrayRunning -ne "true") {
   $xtail = docker compose logs xray --tail 15 2>&1 | Out-String
-  Write-Fail "کانتینر xray در حال اجرا نیست. لاگ:`n$xtail"
+  Write-Fail "xray container is not running. Logs:`n$xtail"
 }
-Write-Ok "سرویس Xray در حال اجرا است."
+Write-Ok "Xray is running."
 
-$printArgs = @{ Remark = $Remark }
-if ($HostAddr) { $printArgs.HostAddr = $HostAddr }
-$vlessUri = & (Join-Path $ScriptDir "print-vless-uri.ps1") @printArgs
-
-$lanIp = $null
-try {
-  if (-not $HostAddr) {
+$lanIp = $HostAddr
+if (-not $lanIp) {
+  try {
     $lanIp = & (Join-Path $ScriptDir "get-lan-ip.ps1")
+  } catch {
+    $lanIp = $null
   }
-} catch { }
+}
+
+$vlessLan = $null
+if ($lanIp) {
+  $vlessLan = & (Join-Path $ScriptDir "print-vless-uri.ps1") -HostAddr $lanIp -Remark "$Remark-lan"
+} else {
+  Write-Info "Could not detect LAN IP; only the localhost VLESS link is shown."
+}
+
+$vlessLocal = & (Join-Path $ScriptDir "print-vless-uri.ps1") -HostAddr 127.0.0.1 -Remark "$Remark-local"
 
 Write-Log ""
 Write-Log "========================================"
-Write-Ok "همه چیز درست است — استک آماده است."
+Write-Ok "All checks passed — stack is ready."
 Write-Log "========================================"
 Write-Log ""
-Write-Log "این لینک VLESS را در کلاینت (v2rayN / v2rayNG / NekoBox) کپی کنید:"
-Write-Log "  Import from clipboard / وارد کردن از کلیپ‌بورد"
-Write-Log ""
-Write-Log $vlessUri
-Write-Log ""
-if ($lanIp -and -not $HostAddr) {
-  Write-Log "آدرس LAN میزبان: $lanIp — کلاینت‌های دیگر روی همان Wi‑Fi باید به این IP وصل شوند."
-} elseif ($HostAddr) {
-  Write-Log "آدرس در لینک: $HostAddr (دستی تنظیم شده)"
+if ($vlessLan) {
+  Write-VlessBox `
+    -Title "VLESS — phone / other devices on Wi-Fi (host $lanIp)" `
+    -Uri $vlessLan `
+    -UriColor Cyan
 }
-Write-Log "پورت Xray از .env (معمولاً 28443). ترافیک از تونل VPN upstream خارج می‌شود."
-Write-Log ""
-Write-Log "بررسی اختیاری: بعد از اتصال کلاینت، IP خروجی را ببینید — https://ipinfo.io/ip"
+Write-VlessBox `
+  -Title "VLESS — this PC only (127.0.0.1)" `
+  -Uri $vlessLocal `
+  -UriColor Green
+Write-Log "Xray port is from .env (default 28443). Traffic exits through the VPN upstream."
+Write-Log "Optional: after connecting a client, check egress IP at https://ipinfo.io/ip"
 Write-Log "========================================"
