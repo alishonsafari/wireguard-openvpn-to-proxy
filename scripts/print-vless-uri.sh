@@ -10,12 +10,20 @@ REMARK="gluetun-lan"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --host)
-      HOST="${2:-}"
+    --host | -host)
+      [[ $# -ge 2 ]] || {
+        echo "Missing value for $1" >&2
+        exit 1
+      }
+      HOST="${2}"
       shift 2
       ;;
-    --remark)
-      REMARK="${2:-}"
+    --remark | -remark)
+      [[ $# -ge 2 ]] || {
+        echo "Missing value for $1" >&2
+        exit 1
+      }
+      REMARK="${2}"
       shift 2
       ;;
     -h | --help)
@@ -47,6 +55,11 @@ if [[ -z "${HOST}" ]]; then
     echo "Could not detect LAN IP. Pass explicitly: $0 --host 192.168.1.10" >&2
     exit 1
   }
+fi
+
+if [[ "${HOST}" == --* ]] || [[ "${HOST}" == -* ]]; then
+  echo "Invalid host '${HOST}'. Use: $0 --host 192.168.1.10" >&2
+  exit 1
 fi
 
 if ! command -v node >/dev/null 2>&1; then

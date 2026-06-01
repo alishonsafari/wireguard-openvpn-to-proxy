@@ -26,6 +26,36 @@ Helper scripts exist in both **Bash** (`.sh`) and **PowerShell** (`.ps1`).
 
 ---
 
+## Quick start (one command)
+
+Put your VPN file in `profiles/`, set `OVPN_USER` / `OVPN_PASSWORD` in `.env` first if the `.ovpn` uses `auth-user-pass`, then run:
+
+```bash
+./scripts/start-stack.sh --profile-path ./profiles/Smart11MTN-nl.ovpn
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-stack.ps1 -ProfilePath .\profiles\Smart11MTN-nl.ovpn
+```
+
+WireGuard example:
+
+```bash
+./scripts/start-stack.sh --profile-path ./profiles/VS7.conf
+```
+
+The script will:
+
+1. Apply the profile (WireGuard or OpenVPN, detected by `.conf` / `.ovpn`)
+2. Ensure a VLESS UUID exists in `xray/config.json`
+3. Start `gluetun` + `xray` with Docker Compose
+4. Wait until the VPN tunnel is up
+5. Print a **VLESS** link and Persian status messages (copy into v2rayN / v2rayNG / NekoBox)
+
+Optional: `--host 127.0.0.1` / `-HostAddr 127.0.0.1` for testing on the same PC only; omit for LAN clients (auto-detected IP).
+
+---
+
 ## Step 1 — `.env` file
 
 Compose, `print-vless-uri`, and Gluetun all expect a **`.env`** in the repo root. Nothing in the repo commits a real `.env`; you start from **`.env.example`**.
@@ -207,6 +237,7 @@ sudo ufw allow 28443/tcp
 
 | Script | Purpose |
 |--------|--------|
+| `start-stack.sh` / `.ps1` | **All-in-one:** apply profile, start Docker, wait for VPN, print VLESS URI |
 | `get-lan-ip.sh` / `.ps1` | Print a likely LAN IPv4 |
 | `switch-wireguard-profile.*` | Fill `WG_*` in `.env` from a `.conf` |
 | `switch-openvpn-profile.*` | Copy `.ovpn` to `gluetun/custom.ovpn`, set `VPN_TYPE=openvpn` |

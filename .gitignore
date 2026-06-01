@@ -1,4 +1,4 @@
 profiles/*
 gluetun/
-xray/log
+xray/log/
 .env

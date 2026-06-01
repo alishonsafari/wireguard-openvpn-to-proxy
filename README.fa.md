@@ -26,6 +26,30 @@
 
 ---
 
+## شروع سریع (یک دستور)
+
+فایل VPN را در `profiles/` بگذار. اگر `.ovpn` شما `auth-user-pass` دارد، قبلش در `.env` مقدار `OVPN_USER` و `OVPN_PASSWORD` را پر کن، بعد:
+
+```bash
+./scripts/start-stack.sh --profile-path ./profiles/Smart11MTN-nl.ovpn
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-stack.ps1 -ProfilePath .\profiles\Smart11MTN-nl.ovpn
+```
+
+WireGuard:
+
+```bash
+./scripts/start-stack.sh --profile-path ./profiles/VS7.conf
+```
+
+اسکریپت پروفایل را اعمال می‌کند، Docker (`gluetun` + `xray`) را بالا می‌آورد، تا وصل شدن VPN صبر می‌کند و در پایان **لینک VLESS** را با پیام راهنما چاپ می‌کند — همان را در v2rayN / v2rayNG / NekoBox از کلیپ‌بورد import کنید.
+
+اختیاری: `--host 127.0.0.1` فقط برای تست روی همین PC؛ برای موبایل/لپ‌تاپ دیگر روی Wi‑Fi همان دستور را بدون `--host` بزنید.
+
+---
+
 ## گام ۱ — فایل `.env`
 
 `docker compose`، اسکریپت لینک VLESS و Gluetun به یک فایل **`.env`** در ریشهٔ مخزن نیاز دارند. داخل مخزن فقط **`.env.example`** هست؛ خودش به‌تنهایی جایگزین `.env` نمی‌شود مگر اینکه آن را کپی کنی یا اسکریپت برایت بسازد.
@@ -161,8 +185,10 @@ sudo ufw allow 28443/tcp
 
 | اسکریپت | کار |
 |---------|-----|
+| `start-stack.*` | **همه‌کاره:** اعمال پروفایل، بالا آوردن Docker، انتظار VPN، چاپ لینک VLESS |
 | `get-lan-ip.*` | چاپ یک آی‌پی LAN محتمل |
 | `switch-wireguard-profile.*` | پر کردن `WG_*` در `.env` از `.conf` |
+| `switch-openvpn-profile.*` | کپی `.ovpn` به `gluetun/custom.ovpn` و `VPN_TYPE=openvpn` |
 | `generate-secrets.*` | UUID جدید در `xray/config.json` |
 | `print-vless-uri.*` | چاپ لینک `vless://` برای کلاینت |
 
