@@ -13,7 +13,7 @@
       "settings": {
         "clients": [
           {
-            "id": "cce2ab99-0889-4e10-8d04-eed212818df6",
+            "id": "d494442b-e4a1-4f98-a921-ec8f321cae46",
             "level": 0,
             "email": "lan-client@xray.local"
           }
@@ -25,7 +25,11 @@
       },
       "sniffing": {
         "enabled": true,
-        "destOverride": ["http", "tls", "quic"]
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ]
       }
     },
     {
@@ -36,7 +40,7 @@
       "settings": {
         "clients": [
           {
-            "id": "cce2ab99-0889-4e10-8d04-eed212818df6",
+            "id": "d494442b-e4a1-4f98-a921-ec8f321cae46",
             "alterId": 0,
             "email": "lan-client-vmess@xray.local"
           }
@@ -47,7 +51,11 @@
       },
       "sniffing": {
         "enabled": true,
-        "destOverride": ["http", "tls", "quic"]
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ]
       }
     }
   ],
@@ -66,17 +74,23 @@
     "rules": [
       {
         "type": "field",
-        "domain": ["geosite:category-ads-all"],
+        "domain": [
+          "geosite:category-ads-all"
+        ],
         "outboundTag": "block"
       },
       {
         "type": "field",
-        "domain": ["geosite:private"],
+        "domain": [
+          "geosite:private"
+        ],
         "outboundTag": "direct"
       },
       {
         "type": "field",
-        "ip": ["geoip:private"],
+        "ip": [
+          "geoip:private"
+        ],
         "outboundTag": "direct"
       }
     ]
