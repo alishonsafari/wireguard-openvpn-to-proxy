@@ -54,7 +54,15 @@ The script will:
 
 Optional: `--host 127.0.0.1` / `-HostAddr 127.0.0.1` for testing on the same PC only; omit for LAN clients (auto-detected IP).
 
+**Recommended:** use `start-stack` for normal use — one profile path, Docker starts, VLESS link is printed. That is enough for most people.
+
+**Manual mode:** the steps below (Step 1 → Step 4) run the same workflow **one command at a time** (`switch-*-profile`, `generate-secrets`, `docker compose up`, `print-vless-uri`). Use manual mode when you want to inspect or change something between steps (e.g. edit `.env` after switching profile, regenerate UUID only, restart Docker without re-applying the profile). You do **not** need manual mode if `start-stack` works for you.
+
 ---
+
+## Manual setup (step by step)
+
+Skip this section if you already used **Quick start** and the stack is running.
 
 ## Step 1 — `.env` file
 
@@ -105,7 +113,7 @@ Most `.ovpn` exports already embed `<ca>`, `<cert>`, `<key>`, and `<tls-auth>`. 
 
 ## Step 3 — Apply a profile, set UUID, start Docker
 
-Still from the repo root. Pick **either** WireGuard (3a) **or** OpenVPN (3b) — not both at once.
+Same stages as `start-stack`, but split into separate commands. Still from the repo root; pick **either** WireGuard (3a) **or** OpenVPN (3b) — not both at once.
 
 ### 3a — WireGuard: push profile values into `.env`
 
