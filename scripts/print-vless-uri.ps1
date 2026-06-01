@@ -5,6 +5,29 @@ param(
   [string]$ConfigPath = ".\xray\config.json"
 )
 
+# Support bash-style flags (PowerShell does not treat --host as -HostAddr).
+for ($i = 0; $i -lt $args.Count; $i++) {
+  switch ($args[$i]) {
+    { $_ -in '--host', '-host' } {
+      if ($i + 1 -ge $args.Count) { throw "Missing value after $($args[$i])" }
+      $HostAddr = $args[++$i]
+      continue
+    }
+    { $_ -in '--remark', '-remark' } {
+      if ($i + 1 -ge $args.Count) { throw "Missing value after $($args[$i])" }
+      $Remark = $args[++$i]
+      continue
+    }
+    default {
+      if (-not $HostAddr) {
+        $HostAddr = $args[$i]
+      } else {
+        throw "Unknown argument: $($args[$i]). Use -HostAddr / --host and -Remark / --remark."
+      }
+    }
+  }
+}
+
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
